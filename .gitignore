@@ -1,0 +1,8 @@
+.vscode
+logs/
+build/
+data/
+bin/
+output/
+main
+output
