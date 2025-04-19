@@ -12,7 +12,7 @@ struct SavedVideoParams {
     double fps;
 };
 
-void process_frame(cv::Mat& frame){
+void process_frame(cv::Mat& frame1, cv::Mat& frame2){
     // ToDo: add VO
 }
 
@@ -74,22 +74,29 @@ int main() {
     // Window to show the video
     cv::namedWindow("Video", cv::WINDOW_AUTOSIZE);
 
-    cv::Mat frame;
+    cv::Mat frame1, frame2;
+    cap >> frame1;
+    if (frame1.empty()){
+        std::cerr << "Error: No frame." << std::endl;
+        return -1;
+    }
+        
     while (true) {
         // Read next frame
-        cap >> frame;
+        cap >> frame2;
 
         // Check if frame is empty (end of video)
-        if (frame.empty())
+        if (frame2.empty())
             break;
 
-        process_frame(frame);
+        process_frame(frame1, frame2);
 
         // Display the frame
-        cv::imshow("Video", frame);
+        cv::imshow("Video", frame2);
 
-        write_to_file(frame, video_params, writer, false);
+        write_to_file(frame2, video_params, writer, false);
 
+        frame1 = frame2;
         // Wait for 30ms and break if 'q' is pressed
         if (cv::waitKey(30) == 'q')
             break;
