@@ -86,7 +86,7 @@ int main() {
         process_frame(frame);
 
         // Display the frame
-        cv::imshow("Video with detection", frame);
+        cv::imshow("Video", frame);
 
         write_to_file(frame, video_params, writer, false);
 
