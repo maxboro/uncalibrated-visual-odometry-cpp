@@ -64,7 +64,7 @@ int main() {
 
     // for saving video
     struct SavedVideoParams video_params = get_params(cap);
-    cv::VideoWriter writer, writer_proc;
+    cv::VideoWriter writer;
     bool writer_init_is_successful = initialize_writers(video_params, writer);
     if (!writer_init_is_successful){
         std::cerr << "Error: Writers init wasn't successful." << std::endl;
