@@ -72,7 +72,7 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2, std::vector<cv::Point2f>& k
     cv::Mat essential_martix = camera_intrinsics.t() * fundamental_matrix * camera_intrinsics;
 
     cv::Mat rotation_estimate, translation_direction;
-    cv::recoverPose(essential_martix, inlier_pts1, inlier_pts2, camera_intrinsics, rotation_estimate, translation_direction);
+    cv::recoverPose(essential_martix, pts1, pts2, camera_intrinsics, rotation_estimate, translation_direction);
     // std::cout << rotation_estimate << std::endl;
     // std::cout << translation_direction << std::endl;
 
