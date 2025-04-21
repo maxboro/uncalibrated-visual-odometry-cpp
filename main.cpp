@@ -4,9 +4,9 @@
 #include <filesystem>
 
 constexpr double VIDEO_SAVE_RESIZE_COEF = 0.5;
-// constexpr const char* input_video_path = "./data/advio-01/iphone/frames.mov";
-constexpr const char* input_video_path = "./data/road.mp4";
-constexpr int guessed_focal_length = 700;
+// constexpr const char* INPUT_VIDEO_PATH = "./data/advio-01/iphone/frames.mov";
+constexpr const char* INPUT_VIDEO_PATH = "./data/road.mp4";
+constexpr int GUESSED_FOCAL_LENGTH = 700;
 constexpr bool SHOW_KEYPOINTS = true;
 
 static cv::Mat pose = cv::Mat::eye(4, 4, CV_64F);
@@ -59,8 +59,8 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2, std::vector<cv::Point2f>& k
 
     // rough estimate of camera intrinsics
     cv::Mat camera_intrinsics = (cv::Mat_<double>(3, 3) << 
-        guessed_focal_length, 0, frame1.cols / 2,
-        0, guessed_focal_length, frame1.rows / 2,
+        GUESSED_FOCAL_LENGTH, 0, frame1.cols / 2,
+        0, GUESSED_FOCAL_LENGTH, frame1.rows / 2,
         0, 0, 1);
 
 
@@ -152,7 +152,7 @@ int main() {
     std::filesystem::create_directory("./output");
 
     // Open the video file
-    cv::VideoCapture cap(input_video_path);
+    cv::VideoCapture cap(INPUT_VIDEO_PATH);
     if (!cap.isOpened()) {
         std::cerr << "Error: Cannot open the video file." << std::endl;
         return -1;
