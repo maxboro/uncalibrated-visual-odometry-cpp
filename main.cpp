@@ -4,7 +4,11 @@
 #include <filesystem>
 
 constexpr double VIDEO_SAVE_RESIZE_COEF = 0.5;
-constexpr const char* input_video_path = "./data/advio-15/iphone/frames.mov";
+// constexpr const char* input_video_path = "./data/advio-01/iphone/frames.mov";
+constexpr const char* input_video_path = "./data/road.mp4";
+constexpr int guessed_focal_length = 700;
+
+static cv::Mat pose = cv::Mat::eye(4, 4, CV_64F);
 
 struct SavedVideoParams {
     int frame_width;
@@ -13,7 +17,60 @@ struct SavedVideoParams {
 };
 
 void process_frame(cv::Mat& frame1, cv::Mat& frame2){
-    // ToDo: add VO
+
+    // keypoints
+    cv::Ptr<cv::ORB> orb = cv::ORB::create();
+    std::vector<cv::KeyPoint> keypoints1, keypoints2;
+    cv::Mat descriptors1, descriptors2;
+    orb->detectAndCompute(frame1, cv::noArray(), keypoints1, descriptors1);
+    orb->detectAndCompute(frame2, cv::noArray(), keypoints2, descriptors2);
+
+
+    // matching
+    cv::BFMatcher matcher(cv::NORM_HAMMING);
+    std::vector<cv::DMatch> matches;
+    matcher.match(descriptors1, descriptors2, matches);
+
+    // fundamental matrix
+    std::vector<cv::Point2f> pts1, pts2;
+    for (auto& match : matches) {
+        pts1.push_back(keypoints1[match.queryIdx].pt);
+        pts2.push_back(keypoints2[match.trainIdx].pt);
+    }
+
+    cv::Mat inlierMask;
+    cv::Mat F = cv::findFundamentalMat(pts1, pts2, cv::FM_RANSAC, 3.0, 0.99, inlierMask);
+
+    // filtering inliers
+    std::vector<cv::Point2f> inlierPts1, inlierPts2;
+    for (int i = 0; i < inlierMask.rows; ++i) {
+        if (inlierMask.at<uchar>(i)) {
+            inlierPts1.push_back(pts1[i]);
+            inlierPts2.push_back(pts2[i]);
+        }
+    }
+
+    // rough estimate of camera intrinsics
+    cv::Mat K = (cv::Mat_<double>(3, 3) << 
+        guessed_focal_length, 0, frame1.cols / 2,
+        0, guessed_focal_length, frame1.rows / 2,
+        0, 0, 1);
+
+    // essential martix
+    cv::Mat E = K.t() * F * K;
+
+    cv::Mat rotation_estimate, translation_direction;
+    cv::recoverPose(E, inlierPts1, inlierPts2, K, rotation_estimate, translation_direction);
+    // std::cout << rotation_estimate << std::endl;
+    // std::cout << translation_direction << std::endl;
+
+    cv::Mat Rt = cv::Mat::eye(4, 4, CV_64F);
+    rotation_estimate.copyTo(Rt(cv::Rect(0, 0, 3, 3)));
+    translation_direction.copyTo(Rt(cv::Rect(3, 0, 1, 3)));
+
+    // Update global pose
+    pose = pose * Rt; 
+
 }
 
 struct SavedVideoParams get_params(const cv::VideoCapture& cap){ 
@@ -52,6 +109,20 @@ void write_to_file(const cv::Mat& frame, const struct SavedVideoParams& video_pa
     writer.write(frame_tmp);
 }
 
+void visualize_trajectory(cv::Mat& traj){
+
+    // Extract camera translation (world position)
+    double x = pose.at<double>(0, 3);
+    double z = pose.at<double>(2, 3);  // We use X-Z plane for simplicity
+
+    // Convert to image coordinates
+    int draw_x = static_cast<int>(x * 5 + traj.cols / 2); // scale & center
+    int draw_z = static_cast<int>(z * 5 + traj.rows / 2);
+
+    cv::circle(traj, cv::Point(draw_x, draw_z), 2, cv::Scalar(0, 255, 0), -1);
+    cv::imshow("Trajectory", traj);
+}
+
 int main() {
     std::filesystem::create_directory("./output");
 
@@ -71,8 +142,11 @@ int main() {
         return -1;
     }
     
-    // Window to show the video
+    cv::Mat traj = cv::Mat::zeros(600, 600, CV_8UC3);
+
+    // Windows
     cv::namedWindow("Video", cv::WINDOW_AUTOSIZE);
+    cv::namedWindow("Trajectory", cv::WINDOW_AUTOSIZE);
 
     cv::Mat frame1, frame2;
     cap >> frame1;
@@ -97,6 +171,9 @@ int main() {
         write_to_file(frame2, video_params, writer, false);
 
         frame1 = frame2;
+
+        visualize_trajectory(traj);
+
         // Wait for 30ms and break if 'q' is pressed
         if (cv::waitKey(30) == 'q')
             break;
