@@ -49,8 +49,18 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2, std::vector<cv::Point2f>& k
     }
     matches_count = n_matches;
 
+    // rough estimate of camera intrinsics
+    cv::Mat camera_intrinsics = (cv::Mat_<double>(3, 3) << 
+        GUESSED_FOCAL_LENGTH, 0, frame1.cols / 2,
+        0, GUESSED_FOCAL_LENGTH, frame1.rows / 2,
+        0, 0, 1);
+
+
     cv::Mat inlier_mask;
-    cv::Mat fundamental_matrix = cv::findFundamentalMat(pts1, pts2, cv::FM_RANSAC, 2.0, 0.99, inlier_mask);
+    cv::Mat essential_martix = cv::findEssentialMat(
+        pts1, pts2, camera_intrinsics,
+        cv::RANSAC, 0.99, 1.0, inlier_mask
+    );
 
     // filtering inliers
     std::vector<cv::Point2f> inlier_pts1, inlier_pts2;
@@ -61,15 +71,6 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2, std::vector<cv::Point2f>& k
         }
     }
     inlier_count = cv::countNonZero(inlier_mask);
-
-    // rough estimate of camera intrinsics
-    cv::Mat camera_intrinsics = (cv::Mat_<double>(3, 3) << 
-        GUESSED_FOCAL_LENGTH, 0, frame1.cols / 2,
-        0, GUESSED_FOCAL_LENGTH, frame1.rows / 2,
-        0, 0, 1);
-
-
-    cv::Mat essential_martix = camera_intrinsics.t() * fundamental_matrix * camera_intrinsics;
 
     cv::Mat rotation_estimate, translation_direction;
     cv::recoverPose(essential_martix, pts1, pts2, camera_intrinsics, rotation_estimate, translation_direction);
