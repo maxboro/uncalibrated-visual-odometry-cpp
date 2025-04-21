@@ -19,18 +19,20 @@ struct SavedVideoParams {
     double fps;
 };
 
+void calculate_keypoints(cv::Ptr<cv::ORB> orb, const cv::Mat& frame, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors){
+    cv::Mat gray;
+    cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+    orb->detectAndCompute(gray, cv::noArray(), keypoints, descriptors);
+}
+
 void process_frame(cv::Mat& frame1, cv::Mat& frame2, std::vector<cv::Point2f>& keypoints_to_display){
 
     // keypoints
     cv::Ptr<cv::ORB> orb = cv::ORB::create();
     std::vector<cv::KeyPoint> keypoints1, keypoints2;
     cv::Mat descriptors1, descriptors2;
-
-    cv::Mat gray1, gray2;
-    cv::cvtColor(frame1, gray1, cv::COLOR_BGR2GRAY);
-    cv::cvtColor(frame2, gray2, cv::COLOR_BGR2GRAY);
-    orb->detectAndCompute(gray1, cv::noArray(), keypoints1, descriptors1);
-    orb->detectAndCompute(gray2, cv::noArray(), keypoints2, descriptors2);
+    calculate_keypoints(orb, frame1, keypoints1, descriptors1);
+    calculate_keypoints(orb, frame2, keypoints2, descriptors2);
 
     // matching
     std::vector<std::vector<cv::DMatch>> matches;
