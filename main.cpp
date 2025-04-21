@@ -9,6 +9,7 @@ constexpr const char* input_video_path = "./data/road.mp4";
 constexpr int guessed_focal_length = 700;
 
 static cv::Mat pose = cv::Mat::eye(4, 4, CV_64F);
+static int inlier_count = 0;
 
 struct SavedVideoParams {
     int frame_width;
@@ -49,6 +50,7 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2){
             inlierPts2.push_back(pts2[i]);
         }
     }
+    inlier_count = cv::countNonZero(inlierMask);
 
     // rough estimate of camera intrinsics
     cv::Mat K = (cv::Mat_<double>(3, 3) << 
@@ -166,6 +168,9 @@ int main() {
         process_frame(frame1, frame2);
 
         // Display the frame
+        cv::putText(frame2, "N inliers: " + std::to_string(inlier_count), cv::Point(30, 30), 
+            cv::FONT_HERSHEY_SIMPLEX , 1.2, 
+            cv::Scalar(0, 0, 255), 1.5, cv::LINE_AA);
         cv::imshow("Video", frame2);
 
         write_to_file(frame2, video_params, writer, false);
