@@ -9,10 +9,10 @@ constexpr int GUESSED_FOCAL_LENGTH = 700;
 constexpr bool SHOW_KEYPOINTS = true;
 constexpr int TRAJECTORY_VIS_SCALE = 1;
 
-static cv::Mat pose = cv::Mat::eye(4, 4, CV_64F);
-static int inlier_count = 0;
-static int matches_count = 0;
-
+struct VOState {
+    cv::Mat pose = cv::Mat::eye(4,4,CV_64F);
+    int inlier_count = 0, matches_count = 0;
+};
 
 void calculate_keypoints(cv::Ptr<cv::ORB> orb, const cv::Mat& frame, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors){
     cv::Mat gray;
@@ -21,6 +21,7 @@ void calculate_keypoints(cv::Ptr<cv::ORB> orb, const cv::Mat& frame, std::vector
 }
 
 void calculate_pose(
+        struct VOState& vo_state,
         const std::vector<cv::KeyPoint>& keypoints1,
         const std::vector<cv::KeyPoint>& keypoints2,
         const cv::Mat& descriptors1,
@@ -44,7 +45,7 @@ void calculate_pose(
             n_matches++;
         }
     }
-    matches_count = n_matches;
+    vo_state.matches_count = n_matches;
 
     cv::Mat inlier_mask;
     cv::Mat essential_martix = cv::findEssentialMat(
@@ -60,7 +61,7 @@ void calculate_pose(
             inlier_pts2.push_back(pts2[i]);
         }
     }
-    inlier_count = cv::countNonZero(inlier_mask);
+    vo_state.inlier_count = cv::countNonZero(inlier_mask);
 
     cv::Mat rotation_estimate, translation_direction;
     cv::recoverPose(essential_martix, pts1, pts2, camera_intrinsics, rotation_estimate, translation_direction);
@@ -72,16 +73,16 @@ void calculate_pose(
     translation_direction.copyTo(relative_motion(cv::Rect(3, 0, 1, 3)));
 
     // Update global pose
-    pose = pose * relative_motion;
+    vo_state.pose = vo_state.pose * relative_motion;
     keypoints_to_display = inlier_pts2;
 
 }
 
-void visualize_trajectory(cv::Mat& traj){
+void visualize_trajectory(const struct VOState& vo_state, cv::Mat& traj){
 
     // Extract camera translation (world position)
-    double x = pose.at<double>(0, 3);
-    double z = pose.at<double>(2, 3);  // We use X-Z plane for simplicity
+    double x = vo_state.pose.at<double>(0, 3);
+    double z = vo_state.pose.at<double>(2, 3);  // We use X-Z plane for simplicity
 
     // Convert to image coordinates
     int draw_x = static_cast<int>(x * TRAJECTORY_VIS_SCALE + traj.cols / 2); // scale & center
@@ -91,9 +92,9 @@ void visualize_trajectory(cv::Mat& traj){
     cv::imshow("Trajectory", traj);
 }
 
-void display_frame(cv::Mat& frame, std::vector<cv::Point2f>& keypoints_to_display){
+void display_frame(const struct VOState& vo_state, cv::Mat& frame, std::vector<cv::Point2f>& keypoints_to_display){
     cv::Mat frame_copy = frame.clone();
-    std::string info = "N inliers: " + std::to_string(inlier_count) + " among " + std::to_string(matches_count) + " matches";
+    std::string info = "N inliers: " + std::to_string(vo_state.inlier_count) + " among " + std::to_string(vo_state.matches_count) + " matches";
     cv::putText(frame_copy, info, cv::Point(30, 30), 
         cv::FONT_HERSHEY_SIMPLEX , 1.2, 
         cv::Scalar(0, 0, 255), 1.5, cv::LINE_AA);
@@ -110,6 +111,8 @@ void display_frame(cv::Mat& frame, std::vector<cv::Point2f>& keypoints_to_displa
 
 int main() {
     std::filesystem::create_directory("./output");
+
+    struct VOState vo_state;
 
     // Open the video file
     cv::VideoCapture cap(INPUT_VIDEO_PATH);
@@ -157,9 +160,9 @@ int main() {
         cv::Mat descriptors2;
         calculate_keypoints(orb, frame2, keypoints2, descriptors2);
 
-        calculate_pose(keypoints1, keypoints2, descriptors1, descriptors2, camera_intrinsics, keypoints_to_display);
-        display_frame(frame2, keypoints_to_display);
-        visualize_trajectory(traj);
+        calculate_pose(vo_state, keypoints1, keypoints2, descriptors1, descriptors2, camera_intrinsics, keypoints_to_display);
+        display_frame(vo_state, frame2, keypoints_to_display);
+        visualize_trajectory(vo_state, traj);
 
         frame1 = frame2;
         keypoints1 = keypoints2;
