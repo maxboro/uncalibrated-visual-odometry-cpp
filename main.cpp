@@ -32,24 +32,25 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2, std::vector<cv::Point2f>& k
     orb->detectAndCompute(gray1, cv::noArray(), keypoints1, descriptors1);
     orb->detectAndCompute(gray2, cv::noArray(), keypoints2, descriptors2);
 
-
     // matching
+    std::vector<std::vector<cv::DMatch>> matches;
     cv::BFMatcher matcher(cv::NORM_HAMMING);
-    std::vector<cv::DMatch> matches;
-    matcher.match(descriptors1, descriptors2, matches);
+    matcher.knnMatch(descriptors1, descriptors2, matches, 2);
 
-    // fundamental matrix
+    // filter only good matches
     std::vector<cv::Point2f> pts1, pts2;
     int n_matches = 0;
-    for (auto& match : matches) {
-        pts1.push_back(keypoints1[match.queryIdx].pt);
-        pts2.push_back(keypoints2[match.trainIdx].pt);
-        n_matches++;
+    for (auto &match : matches) {
+        if (match.size() == 2 && match[0].distance < 0.75f * match[1].distance){
+            pts1.push_back(keypoints1[match[0].queryIdx].pt);
+            pts2.push_back(keypoints2[match[0].trainIdx].pt);
+            n_matches++;
+        }
     }
     matches_count = n_matches;
 
     cv::Mat inlier_mask;
-    cv::Mat fundamental_matrix = cv::findFundamentalMat(pts1, pts2, cv::FM_RANSAC, 3.0, 0.99, inlier_mask);
+    cv::Mat fundamental_matrix = cv::findFundamentalMat(pts1, pts2, cv::FM_RANSAC, 2.0, 0.99, inlier_mask);
 
     // filtering inliers
     std::vector<cv::Point2f> inlier_pts1, inlier_pts2;
