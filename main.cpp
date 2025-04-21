@@ -48,7 +48,7 @@ void calculate_pose(
     vo_state.matches_count = n_matches;
 
     cv::Mat inlier_mask;
-    cv::Mat essential_martix = cv::findEssentialMat(
+    cv::Mat essential_matrix = cv::findEssentialMat(
         pts1, pts2, camera_intrinsics,
         cv::RANSAC, 0.99, 1.0, inlier_mask
     );
@@ -64,7 +64,7 @@ void calculate_pose(
     vo_state.inlier_count = cv::countNonZero(inlier_mask);
 
     cv::Mat rotation_estimate, translation_direction;
-    cv::recoverPose(essential_martix, pts1, pts2, camera_intrinsics, rotation_estimate, translation_direction);
+    cv::recoverPose(essential_matrix, pts1, pts2, camera_intrinsics, rotation_estimate, translation_direction);
     // std::cout << rotation_estimate << std::endl;
     // std::cout << translation_direction << std::endl;
 
