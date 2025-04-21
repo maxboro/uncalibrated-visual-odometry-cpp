@@ -8,6 +8,7 @@ constexpr double VIDEO_SAVE_RESIZE_COEF = 0.5;
 constexpr const char* INPUT_VIDEO_PATH = "./data/road.mp4";
 constexpr int GUESSED_FOCAL_LENGTH = 700;
 constexpr bool SHOW_KEYPOINTS = true;
+constexpr int TRAJECTORY_VIS_SCALE = 5;
 
 static cv::Mat pose = cv::Mat::eye(4, 4, CV_64F);
 static int inlier_count = 0;
@@ -132,8 +133,8 @@ void visualize_trajectory(cv::Mat& traj){
     double z = pose.at<double>(2, 3);  // We use X-Z plane for simplicity
 
     // Convert to image coordinates
-    int draw_x = static_cast<int>(x * 5 + traj.cols / 2); // scale & center
-    int draw_z = static_cast<int>(z * 5 + traj.rows / 2);
+    int draw_x = static_cast<int>(x * TRAJECTORY_VIS_SCALE + traj.cols / 2); // scale & center
+    int draw_z = static_cast<int>(z * TRAJECTORY_VIS_SCALE + traj.rows / 2);
 
     cv::circle(traj, cv::Point(draw_x, draw_z), 2, cv::Scalar(0, 255, 0), -1);
     cv::imshow("Trajectory", traj);
