@@ -8,7 +8,7 @@ constexpr double VIDEO_SAVE_RESIZE_COEF = 0.5;
 constexpr const char* INPUT_VIDEO_PATH = "./data/road.mp4";
 constexpr int GUESSED_FOCAL_LENGTH = 700;
 constexpr bool SHOW_KEYPOINTS = true;
-constexpr int TRAJECTORY_VIS_SCALE = 5;
+constexpr int TRAJECTORY_VIS_SCALE = 1;
 
 static cv::Mat pose = cv::Mat::eye(4, 4, CV_64F);
 static int inlier_count = 0;
