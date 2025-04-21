@@ -1,7 +1,6 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
 #include <iostream>
-#include <filesystem>
 
 // constexpr const char* INPUT_VIDEO_PATH = "./data/advio-01/iphone/frames.mov";
 constexpr const char* INPUT_VIDEO_PATH = "./data/road.mp4";
@@ -110,8 +109,6 @@ void display_frame(const struct VOState& vo_state, cv::Mat& frame, std::vector<c
 }
 
 int main() {
-    std::filesystem::create_directory("./output");
-
     struct VOState vo_state;
 
     // Open the video file
