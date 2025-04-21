@@ -166,8 +166,10 @@ int main() {
         descriptors1 = descriptors2;
 
         // Wait for 30ms and break if 'q' is pressed
-        if (cv::waitKey(30) == 'q')
+        if (cv::waitKey(30) == 'q'){
+            std::cout << "Exiting on user request." << std::endl;
             break;
+        }
     }
 
     // Release resources
