@@ -7,6 +7,7 @@ constexpr double VIDEO_SAVE_RESIZE_COEF = 0.5;
 // constexpr const char* input_video_path = "./data/advio-01/iphone/frames.mov";
 constexpr const char* input_video_path = "./data/road.mp4";
 constexpr int guessed_focal_length = 700;
+constexpr bool SHOW_KEYPOINTS = true;
 
 static cv::Mat pose = cv::Mat::eye(4, 4, CV_64F);
 static int inlier_count = 0;
@@ -18,7 +19,7 @@ struct SavedVideoParams {
     double fps;
 };
 
-void process_frame(cv::Mat& frame1, cv::Mat& frame2){
+void process_frame(cv::Mat& frame1, cv::Mat& frame2, std::vector<cv::Point2f>& keypoints_to_display){
 
     // keypoints
     cv::Ptr<cv::ORB> orb = cv::ORB::create();
@@ -75,7 +76,8 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2){
     translation_direction.copyTo(relative_motion(cv::Rect(3, 0, 1, 3)));
 
     // Update global pose
-    pose = pose * relative_motion; 
+    pose = pose * relative_motion;
+    keypoints_to_display = inlier_pts2;
 
 }
 
@@ -129,6 +131,23 @@ void visualize_trajectory(cv::Mat& traj){
     cv::imshow("Trajectory", traj);
 }
 
+void display_frame(cv::Mat& frame, std::vector<cv::Point2f>& keypoints_to_display){
+    cv::Mat frame_copy = frame.clone();
+    std::string info = "N inliers: " + std::to_string(inlier_count) + " among " + std::to_string(matches_count) + " matches";
+    cv::putText(frame_copy, info, cv::Point(30, 30), 
+        cv::FONT_HERSHEY_SIMPLEX , 1.2, 
+        cv::Scalar(0, 0, 255), 1.5, cv::LINE_AA);
+
+    // display keypoints
+    if (SHOW_KEYPOINTS){
+        for (auto point : keypoints_to_display){
+            cv::circle(frame_copy, point, 1, cv::Scalar(0, 0, 255), 2);
+        }
+    }
+
+    cv::imshow("Video", frame_copy);
+}
+
 int main() {
     std::filesystem::create_directory("./output");
 
@@ -169,19 +188,12 @@ int main() {
         if (frame2.empty())
             break;
 
-        process_frame(frame1, frame2);
-
-        // Display the frame
-        std::string info = "N inliers: " + std::to_string(inlier_count) + " among " + std::to_string(matches_count) + " matches";
-        cv::putText(frame2, info, cv::Point(30, 30), 
-            cv::FONT_HERSHEY_SIMPLEX , 1.2, 
-            cv::Scalar(0, 0, 255), 1.5, cv::LINE_AA);
-        cv::imshow("Video", frame2);
-
+        std::vector<cv::Point2f> keypoints_to_display;
+        process_frame(frame1, frame2, keypoints_to_display);
+        display_frame(frame2, keypoints_to_display);
         write_to_file(frame2, video_params, writer, false);
 
         frame1 = frame2;
-
         visualize_trajectory(traj);
 
         // Wait for 30ms and break if 'q' is pressed
