@@ -47,11 +47,11 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2){
     cv::Mat fundamental_matrix = cv::findFundamentalMat(pts1, pts2, cv::FM_RANSAC, 3.0, 0.99, inlier_mask);
 
     // filtering inliers
-    std::vector<cv::Point2f> inlierPts1, inlierPts2;
+    std::vector<cv::Point2f> inlier_pts1, inlier_pts2;
     for (int i = 0; i < inlier_mask.rows; ++i) {
         if (inlier_mask.at<uchar>(i)) {
-            inlierPts1.push_back(pts1[i]);
-            inlierPts2.push_back(pts2[i]);
+            inlier_pts1.push_back(pts1[i]);
+            inlier_pts2.push_back(pts2[i]);
         }
     }
     inlier_count = cv::countNonZero(inlier_mask);
@@ -66,7 +66,7 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2){
     cv::Mat essential_martix = camera_intrinsics.t() * fundamental_matrix * camera_intrinsics;
 
     cv::Mat rotation_estimate, translation_direction;
-    cv::recoverPose(essential_martix, inlierPts1, inlierPts2, camera_intrinsics, rotation_estimate, translation_direction);
+    cv::recoverPose(essential_martix, inlier_pts1, inlier_pts2, camera_intrinsics, rotation_estimate, translation_direction);
     // std::cout << rotation_estimate << std::endl;
     // std::cout << translation_direction << std::endl;
 
