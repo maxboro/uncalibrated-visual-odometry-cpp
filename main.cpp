@@ -10,6 +10,7 @@ constexpr int guessed_focal_length = 700;
 
 static cv::Mat pose = cv::Mat::eye(4, 4, CV_64F);
 static int inlier_count = 0;
+static int matches_count = 0;
 
 struct SavedVideoParams {
     int frame_width;
@@ -34,10 +35,13 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2){
 
     // fundamental matrix
     std::vector<cv::Point2f> pts1, pts2;
+    int n_matches = 0;
     for (auto& match : matches) {
         pts1.push_back(keypoints1[match.queryIdx].pt);
         pts2.push_back(keypoints2[match.trainIdx].pt);
+        n_matches++;
     }
+    matches_count = n_matches;
 
     cv::Mat inlier_mask;
     cv::Mat fundamental_matrix = cv::findFundamentalMat(pts1, pts2, cv::FM_RANSAC, 3.0, 0.99, inlier_mask);
@@ -168,7 +172,8 @@ int main() {
         process_frame(frame1, frame2);
 
         // Display the frame
-        cv::putText(frame2, "N inliers: " + std::to_string(inlier_count), cv::Point(30, 30), 
+        std::string info = "N inliers: " + std::to_string(inlier_count) + " among " + std::to_string(matches_count) + " matches";
+        cv::putText(frame2, info, cv::Point(30, 30), 
             cv::FONT_HERSHEY_SIMPLEX , 1.2, 
             cv::Scalar(0, 0, 255), 1.5, cv::LINE_AA);
         cv::imshow("Video", frame2);
