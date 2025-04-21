@@ -26,15 +26,15 @@ void calculate_keypoints(cv::Ptr<cv::ORB> orb, const cv::Mat& frame, std::vector
     orb->detectAndCompute(gray, cv::noArray(), keypoints, descriptors);
 }
 
-void process_frame(cv::Mat& frame1, cv::Mat& frame2, std::vector<cv::Point2f>& keypoints_to_display){
-
-    // keypoints
-    cv::Ptr<cv::ORB> orb = cv::ORB::create();
-    std::vector<cv::KeyPoint> keypoints1, keypoints2;
-    cv::Mat descriptors1, descriptors2;
-    calculate_keypoints(orb, frame1, keypoints1, descriptors1);
-    calculate_keypoints(orb, frame2, keypoints2, descriptors2);
-
+void calculate_pose(
+        const std::vector<cv::KeyPoint>& keypoints1,
+        const std::vector<cv::KeyPoint>& keypoints2,
+        const cv::Mat& descriptors1,
+        const cv::Mat& descriptors2,
+        const cv::Mat& camera_intrinsics,
+        std::vector<cv::Point2f>& keypoints_to_display
+        ){
+    
     // matching
     std::vector<std::vector<cv::DMatch>> matches;
     cv::BFMatcher matcher(cv::NORM_HAMMING);
@@ -51,13 +51,6 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2, std::vector<cv::Point2f>& k
         }
     }
     matches_count = n_matches;
-
-    // rough estimate of camera intrinsics
-    cv::Mat camera_intrinsics = (cv::Mat_<double>(3, 3) << 
-        GUESSED_FOCAL_LENGTH, 0, frame1.cols / 2,
-        0, GUESSED_FOCAL_LENGTH, frame1.rows / 2,
-        0, 0, 1);
-
 
     cv::Mat inlier_mask;
     cv::Mat essential_martix = cv::findEssentialMat(
@@ -178,6 +171,9 @@ int main() {
     
     cv::Mat traj = cv::Mat::zeros(600, 600, CV_8UC3);
 
+    // keypoint detector
+    cv::Ptr<cv::ORB> orb = cv::ORB::create();
+
     // Windows
     cv::namedWindow("Video", cv::WINDOW_AUTOSIZE);
     cv::namedWindow("Trajectory", cv::WINDOW_AUTOSIZE);
@@ -188,7 +184,16 @@ int main() {
         std::cerr << "Error: No frame." << std::endl;
         return -1;
     }
-        
+
+    // rough estimate of camera intrinsics
+    cv::Mat camera_intrinsics = (cv::Mat_<double>(3, 3) << 
+        GUESSED_FOCAL_LENGTH, 0, frame1.cols / 2,
+        0, GUESSED_FOCAL_LENGTH, frame1.rows / 2,
+        0, 0, 1);
+    
+    std::vector<cv::KeyPoint> keypoints1;
+    cv::Mat descriptors1;
+    calculate_keypoints(orb, frame1, keypoints1, descriptors1);
     while (true) {
         // Read next frame
         cap >> frame2;
@@ -198,11 +203,16 @@ int main() {
             break;
 
         std::vector<cv::Point2f> keypoints_to_display;
-        process_frame(frame1, frame2, keypoints_to_display);
+        std::vector<cv::KeyPoint> keypoints2;
+        cv::Mat descriptors2;
+        calculate_keypoints(orb, frame2, keypoints2, descriptors2);
+        calculate_pose(keypoints1, keypoints2, descriptors1, descriptors2, camera_intrinsics, keypoints_to_display);
         display_frame(frame2, keypoints_to_display);
         write_to_file(frame2, video_params, writer, false);
 
         frame1 = frame2;
+        keypoints1 = keypoints2;
+        descriptors1 = descriptors2;
         visualize_trajectory(traj);
 
         // Wait for 30ms and break if 'q' is pressed
