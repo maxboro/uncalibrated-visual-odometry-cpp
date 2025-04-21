@@ -1,103 +1,179 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc.hpp>
 #include <iostream>
-#include <filesystem>
 
-constexpr double VIDEO_SAVE_RESIZE_COEF = 0.5;
-constexpr const char* input_video_path = "./data/advio-15/iphone/frames.mov";
+// constexpr const char* INPUT_VIDEO_PATH = "./data/advio-01/iphone/frames.mov";
+constexpr const char* INPUT_VIDEO_PATH = "./data/road.mp4";
+constexpr int GUESSED_FOCAL_LENGTH = 700;
+constexpr bool SHOW_KEYPOINTS = true;
+constexpr int TRAJECTORY_VIS_SCALE = 1;
 
-struct SavedVideoParams {
-    int frame_width;
-    int frame_height;
-    double fps;
+struct VOState {
+    cv::Mat pose = cv::Mat::eye(4,4,CV_64F);
+    int inlier_count = 0, matches_count = 0;
 };
 
-void process_frame(cv::Mat& frame){
-    // ToDo: add VO
+void calculate_keypoints(cv::Ptr<cv::ORB> orb, const cv::Mat& frame, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors){
+    cv::Mat gray;
+    cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+    orb->detectAndCompute(gray, cv::noArray(), keypoints, descriptors);
 }
 
-struct SavedVideoParams get_params(const cv::VideoCapture& cap){ 
-    struct SavedVideoParams params;
-    params.frame_width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH) * VIDEO_SAVE_RESIZE_COEF);
-    params.frame_height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT) * VIDEO_SAVE_RESIZE_COEF);
-    params.fps = cap.get(cv::CAP_PROP_FPS);
-    return params;
-}
+void calculate_pose(
+        struct VOState& vo_state,
+        const std::vector<cv::KeyPoint>& keypoints1,
+        const std::vector<cv::KeyPoint>& keypoints2,
+        const cv::Mat& descriptors1,
+        const cv::Mat& descriptors2,
+        const cv::Mat& camera_intrinsics,
+        std::vector<cv::Point2f>& keypoints_to_display
+        ){
+    
+    // matching
+    std::vector<std::vector<cv::DMatch>> matches;
+    cv::BFMatcher matcher(cv::NORM_HAMMING);
+    matcher.knnMatch(descriptors1, descriptors2, matches, 2);
 
-bool initialize_writers(const struct SavedVideoParams& video_params, cv::VideoWriter& writer){
+    // filter only good matches
+    std::vector<cv::Point2f> pts1, pts2;
+    int n_matches = 0;
+    for (auto &match : matches) {
+        if (match.size() == 2 && match[0].distance < 0.75f * match[1].distance){
+            pts1.push_back(keypoints1[match[0].queryIdx].pt);
+            pts2.push_back(keypoints2[match[0].trainIdx].pt);
+            n_matches++;
+        }
+    }
+    vo_state.matches_count = n_matches;
 
-    // writer for original video with marks
-    writer.open(
-        "./output/output.mp4", 
-        cv::VideoWriter::fourcc('m', 'p', '4', 'v'), // MP4 codec
-        video_params.fps, 
-        cv::Size(video_params.frame_width, video_params.frame_height)
+    cv::Mat inlier_mask;
+    cv::Mat essential_matrix = cv::findEssentialMat(
+        pts1, pts2, camera_intrinsics,
+        cv::RANSAC, 0.99, 1.0, inlier_mask
     );
 
-    if (!writer.isOpened()) {
-        std::cerr << "Error: Cannot open the video writer.\n" << std::endl;
-        return false;
+    // filtering inliers
+    std::vector<cv::Point2f> inlier_pts1, inlier_pts2;
+    for (int i = 0; i < inlier_mask.rows; ++i) {
+        if (inlier_mask.at<uchar>(i)) {
+            inlier_pts1.push_back(pts1[i]);
+            inlier_pts2.push_back(pts2[i]);
+        }
     }
+    vo_state.inlier_count = cv::countNonZero(inlier_mask);
 
-    // if success return true
-    return true;
+    cv::Mat rotation_estimate, translation_direction;
+    cv::recoverPose(essential_matrix, pts1, pts2, camera_intrinsics, rotation_estimate, translation_direction);
+    // std::cout << rotation_estimate << std::endl;
+    // std::cout << translation_direction << std::endl;
+
+    cv::Mat relative_motion = cv::Mat::eye(4, 4, CV_64F);
+    rotation_estimate.copyTo(relative_motion(cv::Rect(0, 0, 3, 3)));
+    translation_direction.copyTo(relative_motion(cv::Rect(3, 0, 1, 3)));
+
+    // Update global pose
+    vo_state.pose = vo_state.pose * relative_motion;
+    keypoints_to_display = inlier_pts2;
+
 }
 
-void write_to_file(const cv::Mat& frame, const struct SavedVideoParams& video_params, cv::VideoWriter& writer, bool is_grey){
-    cv::Mat frame_tmp;
-    cv::resize(frame, frame_tmp, cv::Size(video_params.frame_width, video_params.frame_height));
-    if (is_grey){
-        cv::cvtColor(frame_tmp, frame_tmp, cv::COLOR_GRAY2BGR);
+void visualize_trajectory(const struct VOState& vo_state, cv::Mat& traj){
+
+    // Extract camera translation (world position)
+    double x = vo_state.pose.at<double>(0, 3);
+    double z = vo_state.pose.at<double>(2, 3);  // We use X-Z plane for simplicity
+
+    // Convert to image coordinates
+    int draw_x = static_cast<int>(x * TRAJECTORY_VIS_SCALE + traj.cols / 2); // scale & center
+    int draw_z = static_cast<int>(z * TRAJECTORY_VIS_SCALE + traj.rows / 2);
+
+    cv::circle(traj, cv::Point(draw_x, draw_z), 2, cv::Scalar(0, 255, 0), -1);
+    cv::imshow("Trajectory", traj);
+}
+
+void display_frame(const struct VOState& vo_state, cv::Mat& frame, std::vector<cv::Point2f>& keypoints_to_display){
+    cv::Mat frame_copy = frame.clone();
+    std::string info = "N inliers: " + std::to_string(vo_state.inlier_count) + " among " + std::to_string(vo_state.matches_count) + " matches";
+    cv::putText(frame_copy, info, cv::Point(30, 30), 
+        cv::FONT_HERSHEY_SIMPLEX , 1.2, 
+        cv::Scalar(0, 0, 255), 1.5, cv::LINE_AA);
+
+    // display keypoints
+    if (SHOW_KEYPOINTS){
+        for (const auto &point : keypoints_to_display){
+            cv::circle(frame_copy, point, 1, cv::Scalar(0, 0, 255), 2);
+        }
     }
-    writer.write(frame_tmp);
+
+    cv::imshow("Video", frame_copy);
 }
 
 int main() {
-    std::filesystem::create_directory("./output");
+    struct VOState vo_state;
 
     // Open the video file
-    cv::VideoCapture cap(input_video_path);
+    cv::VideoCapture cap(INPUT_VIDEO_PATH);
     if (!cap.isOpened()) {
         std::cerr << "Error: Cannot open the video file." << std::endl;
         return -1;
     }
+    
+    cv::Mat traj = cv::Mat::zeros(600, 600, CV_8UC3);
 
-    // for saving video
-    struct SavedVideoParams video_params = get_params(cap);
-    cv::VideoWriter writer, writer_proc;
-    bool writer_init_is_successful = initialize_writers(video_params, writer);
-    if (!writer_init_is_successful){
-        std::cerr << "Error: Writers init wasn't successful." << std::endl;
+    // keypoint detector
+    cv::Ptr<cv::ORB> orb = cv::ORB::create();
+
+    // Windows
+    cv::namedWindow("Video", cv::WINDOW_AUTOSIZE);
+    cv::namedWindow("Trajectory", cv::WINDOW_AUTOSIZE);
+
+    cv::Mat frame1, frame2;
+    cap >> frame1;
+    if (frame1.empty()){
+        std::cerr << "Error: No frame." << std::endl;
         return -1;
     }
-    
-    // Window to show the video
-    cv::namedWindow("Video", cv::WINDOW_AUTOSIZE);
 
-    cv::Mat frame;
+    // rough estimate of camera intrinsics
+    cv::Mat camera_intrinsics = (cv::Mat_<double>(3, 3) << 
+        GUESSED_FOCAL_LENGTH, 0, frame1.cols / 2,
+        0, GUESSED_FOCAL_LENGTH, frame1.rows / 2,
+        0, 0, 1);
+    
+    std::vector<cv::KeyPoint> keypoints1;
+    cv::Mat descriptors1;
+    calculate_keypoints(orb, frame1, keypoints1, descriptors1);
+
     while (true) {
         // Read next frame
-        cap >> frame;
+        cap >> frame2;
 
         // Check if frame is empty (end of video)
-        if (frame.empty())
+        if (frame2.empty())
             break;
 
-        process_frame(frame);
+        std::vector<cv::Point2f> keypoints_to_display;
+        std::vector<cv::KeyPoint> keypoints2;
+        cv::Mat descriptors2;
+        calculate_keypoints(orb, frame2, keypoints2, descriptors2);
 
-        // Display the frame
-        cv::imshow("Video with detection", frame);
+        calculate_pose(vo_state, keypoints1, keypoints2, descriptors1, descriptors2, camera_intrinsics, keypoints_to_display);
+        display_frame(vo_state, frame2, keypoints_to_display);
+        visualize_trajectory(vo_state, traj);
 
-        write_to_file(frame, video_params, writer, false);
+        frame1 = frame2;
+        keypoints1 = keypoints2;
+        descriptors1 = descriptors2;
 
         // Wait for 30ms and break if 'q' is pressed
-        if (cv::waitKey(30) == 'q')
+        if (cv::waitKey(30) == 'q'){
+            std::cout << "Exiting on user request." << std::endl;
             break;
+        }
     }
 
     // Release resources
     cap.release();
-    writer.release();
     cv::destroyAllWindows();
     return 0;
 }
