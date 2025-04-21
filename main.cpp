@@ -100,7 +100,7 @@ void display_frame(const struct VOState& vo_state, cv::Mat& frame, std::vector<c
 
     // display keypoints
     if (SHOW_KEYPOINTS){
-        for (auto point : keypoints_to_display){
+        for (const auto &point : keypoints_to_display){
             cv::circle(frame_copy, point, 1, cv::Scalar(0, 0, 255), 2);
         }
     }
