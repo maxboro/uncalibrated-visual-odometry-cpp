@@ -39,39 +39,39 @@ void process_frame(cv::Mat& frame1, cv::Mat& frame2){
         pts2.push_back(keypoints2[match.trainIdx].pt);
     }
 
-    cv::Mat inlierMask;
-    cv::Mat F = cv::findFundamentalMat(pts1, pts2, cv::FM_RANSAC, 3.0, 0.99, inlierMask);
+    cv::Mat inlier_mask;
+    cv::Mat fundamental_matrix = cv::findFundamentalMat(pts1, pts2, cv::FM_RANSAC, 3.0, 0.99, inlier_mask);
 
     // filtering inliers
     std::vector<cv::Point2f> inlierPts1, inlierPts2;
-    for (int i = 0; i < inlierMask.rows; ++i) {
-        if (inlierMask.at<uchar>(i)) {
+    for (int i = 0; i < inlier_mask.rows; ++i) {
+        if (inlier_mask.at<uchar>(i)) {
             inlierPts1.push_back(pts1[i]);
             inlierPts2.push_back(pts2[i]);
         }
     }
-    inlier_count = cv::countNonZero(inlierMask);
+    inlier_count = cv::countNonZero(inlier_mask);
 
     // rough estimate of camera intrinsics
-    cv::Mat K = (cv::Mat_<double>(3, 3) << 
+    cv::Mat camera_intrinsics = (cv::Mat_<double>(3, 3) << 
         guessed_focal_length, 0, frame1.cols / 2,
         0, guessed_focal_length, frame1.rows / 2,
         0, 0, 1);
 
-    // essential martix
-    cv::Mat E = K.t() * F * K;
+
+    cv::Mat essential_martix = camera_intrinsics.t() * fundamental_matrix * camera_intrinsics;
 
     cv::Mat rotation_estimate, translation_direction;
-    cv::recoverPose(E, inlierPts1, inlierPts2, K, rotation_estimate, translation_direction);
+    cv::recoverPose(essential_martix, inlierPts1, inlierPts2, camera_intrinsics, rotation_estimate, translation_direction);
     // std::cout << rotation_estimate << std::endl;
     // std::cout << translation_direction << std::endl;
 
-    cv::Mat Rt = cv::Mat::eye(4, 4, CV_64F);
-    rotation_estimate.copyTo(Rt(cv::Rect(0, 0, 3, 3)));
-    translation_direction.copyTo(Rt(cv::Rect(3, 0, 1, 3)));
+    cv::Mat relative_motion = cv::Mat::eye(4, 4, CV_64F);
+    rotation_estimate.copyTo(relative_motion(cv::Rect(0, 0, 3, 3)));
+    translation_direction.copyTo(relative_motion(cv::Rect(3, 0, 1, 3)));
 
     // Update global pose
-    pose = pose * Rt; 
+    pose = pose * relative_motion; 
 
 }
 
